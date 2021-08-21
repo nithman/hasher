@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
 import java.util.Properties;
 
 /**
@@ -55,7 +56,7 @@ public class Hasher {
                     return false;
                 }).forEach(s -> {
                     boolean processFile = true;
-                    if (mode == null || mode.equals("generate")) {
+                    if (Objects.equals(mode, "generate")) {
                         for (int i = 0; i < digests.length; i++) {
                             File f = new File(s + files[i]);
                             if (f.exists()) {
