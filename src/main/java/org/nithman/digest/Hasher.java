@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -19,11 +18,12 @@ public class Hasher {
 
     static String[] digests = {"MD5", "SHA-1", "SHA-256"};
     static String[] files = {".md5", ".sha1", ".sha256"};
+    static String propertiesFilename = "application.properties";
 
-    static Properties getProperties(final String filename) {
+    static Properties getProperties() {
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         Properties properties = new Properties();
-        try (InputStream resourceStream = loader.getResourceAsStream(filename)) {
+        try (InputStream resourceStream = loader.getResourceAsStream(propertiesFilename)) {
             properties.load(resourceStream);
         } catch (IOException e) {
             e.printStackTrace();
@@ -43,7 +43,7 @@ public class Hasher {
         System.out.println("Starting " + name);
         if (args.length == 0) { System.out.println("Usage: Hasher directory [directory...]"); }
         else {
-            Properties properties = getProperties("application.properties");
+            Properties properties = getProperties();
             String[] extensions = properties.getProperty("file.extensions").split(",");
             final String mode = properties.getProperty("digest.mode");
 
@@ -56,11 +56,23 @@ public class Hasher {
                     return false;
                 }).forEach(s -> {
                     boolean processFile = true;
+                    boolean generateFile = true;
                     if (Objects.equals(mode, "generate")) {
                         for (int i = 0; i < digests.length; i++) {
                             File f = new File(s + files[i]);
                             if (f.exists()) {
                                 processFile = false;
+                                break;
+                            }
+                        }
+                    }
+                    else if (Objects.equals(mode, "validate")) {
+                        generateFile = false;
+                        processFile = false;
+                        for (int i = 0; i < digests.length; i++) {
+                            File f = new File(s + files[i]);
+                            if (f.exists()) {
+                                processFile = true;
                                 break;
                             }
                         }
@@ -100,18 +112,23 @@ public class Hasher {
 
                             if (f.exists()) {
                                 try {
-                                    char[] cbuf = new char[md[i].digest().length * 2];
-                                    new InputStreamReader(new FileInputStream(f),"UTF-8").read(cbuf);
-                                    String data2 = String.valueOf(cbuf);
-                                    boolean status = data2.equals(data.substring(0, data2.length()));
-                                    System.out.println(s.getFileName() + " " + digests[i] + " " + status);
+                                    int expectedSize = md[i].digest().length * 2;
+                                    char[] buffer = new char[expectedSize];
+                                    int n = new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8).read(buffer);
+                                    if (n != expectedSize) {
+                                        System.out.println(s.getFileName() + digests[i] + " bad format");
+                                    }
+                                    else {
+                                        String data2 = String.valueOf(buffer);
+                                        boolean status = data2.equals(data.substring(0, data2.length()));
+                                        System.out.println(s.getFileName() + " " + digests[i] + " " + status);
+                                    }
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
                             }
-                            else {
+                            else if (generateFile) {
                                 try {
-                                    //f.createNewFile();
                                     OutputStreamWriter osw = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8);
                                     osw.write(data);
                                     osw.close();
