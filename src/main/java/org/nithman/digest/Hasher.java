@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -16,8 +18,9 @@ import java.util.Properties;
 public class Hasher {
     static final String name = "Hasher";
 
-    static String[] digests = {"MD5", "SHA-1", "SHA-256"};
-    static String[] files = {".md5", ".sha1", ".sha256"};
+    static String[] digests = {"MD5", "SHA-1", "SHA-256", "SHA-512" };
+    static String[] extensions = {".md5", ".sha1", ".sha256", ".sha512"};
+    static Map<String, String> filemap = new HashMap<>();
     static String propertiesFilename = "application.properties";
 
     static Properties getProperties() {
@@ -44,8 +47,16 @@ public class Hasher {
         if (args.length == 0) { System.out.println("Usage: Hasher directory [directory...]"); }
         else {
             Properties properties = getProperties();
+            for (int i = 0; i < digests.length; i++) {
+                filemap.put(digests[i], extensions[i]);
+            }
             String[] extensions = properties.getProperty("file.extensions").split(",");
             final String mode = properties.getProperty("digest.mode");
+            final String types = properties.getProperty("digest.types");
+            if (types != null && types.length() > 2) {
+                System.out.println("setting digests to " + types);
+                digests = types.split(",");
+            }
 
             for (String arg : args) {
                 System.out.println("Processing " + arg);
@@ -59,7 +70,7 @@ public class Hasher {
                     boolean generateFile = true;
                     if (Objects.equals(mode, "generate")) {
                         for (int i = 0; i < digests.length; i++) {
-                            File f = new File(s + files[i]);
+                            File f = new File(s + filemap.get(digests[i]));
                             if (f.exists()) {
                                 processFile = false;
                                 break;
@@ -70,7 +81,7 @@ public class Hasher {
                         generateFile = false;
                         processFile = false;
                         for (int i = 0; i < digests.length; i++) {
-                            File f = new File(s + files[i]);
+                            File f = new File(s + filemap.get(digests[i]));
                             if (f.exists()) {
                                 processFile = true;
                                 break;
@@ -91,15 +102,16 @@ public class Hasher {
                             e.printStackTrace();
                         }
 
-                        DigestInputStream[] dis = new DigestInputStream[3];
-                        dis[0] = new DigestInputStream(is,     md[0]);
-                        dis[1] = new DigestInputStream(dis[0], md[1]);
-                        dis[2] = new DigestInputStream(dis[1], md[2]);
+                        DigestInputStream[] dis = new DigestInputStream[digests.length];
+                        dis[0] = new DigestInputStream(is, md[0]);
+                        for (int i = 1; i < digests.length; i++) {
+                            dis[i] = new DigestInputStream(dis[i-1], md[i]);
+                        }
                         byte[] bytes = new byte[4092];
                         int result = 0;
                         do {
                             try {
-                                result = dis[2].read(bytes);
+                                result = dis[digests.length - 1].read(bytes);
                             }
                             catch (IOException e) {
                                 e.printStackTrace();
@@ -108,7 +120,7 @@ public class Hasher {
 
                         for (int i = 0; i < digests.length; i++) {
                             String data = formattedDigest(md[i], s);
-                            File f = new File(s + files[i]);
+                            File f = new File(s + filemap.get(digests[i]));
 
                             if (f.exists()) {
                                 try {
